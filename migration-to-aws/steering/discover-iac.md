@@ -27,6 +27,16 @@ Record file paths and types for all files found.
 
 **Exit gate:** If NO Terraform files (`.tf`, `.tfvars`, `.tfstate`, `.terraform.lock.hcl`) are found, **exit cleanly**. Return no output artifacts. Other sub-discovery files may still produce artifacts.
 
+**Secret hygiene (HARD — no exceptions):** `.tfstate` and `.tfvars` files may contain database passwords, API keys, TLS private keys, and certificate material in plaintext.
+
+When `.tfstate` or `.tfvars` files are found:
+
+1. **Warn the user immediately:** "Found [N] Terraform state/variable file(s). These may contain secrets. They will be read for resource discovery only — raw values will NOT be copied into any migration artifact."
+2. **Redact sensitive attributes** before writing to `gcp-resource-inventory.json`. For any `gcp_config` field whose key matches a sensitive pattern (password, secret, key, token, credential, private_key, client_secret, access_key, api_key), replace the value with `"[REDACTED]"`.
+3. **Never write raw secret values** into `gcp-resource-inventory.json`, `gcp-resource-clusters.json`, or any other output artifact.
+
+Sensitive key patterns to redact (case-insensitive): `password`, `passwd`, `secret`, `api_key`, `apikey`, `access_key`, `private_key`, `client_secret`, `token`, `credential`, `auth`.
+
 ## Step 1: Extract Resources from Terraform
 
 1. Read all `.tf`, `.tfvars`, and `.tfstate` files in working directory (recursively)
@@ -75,9 +85,28 @@ Count resources matching these types. This is the **primary resource count**.
 - **If primary resource count ≤ 8:** Use **simplified discovery** (Step 3S below). Skip Steps 3-6.
 - **If primary resource count > 8:** Use **full discovery** (Steps 3-6, unchanged).
 
+## Step 2.6: Graviton (ARM64) Signal Scan
+
+From IaC alone, architecture compatibility can only be inferred coarsely. **Load** `schema-graviton.md` for the IaC signal table and `graviton_profile` schema.
+
+For each compute resource extracted in Step 1 (`google_compute_instance`, `google_cloud_run_service`/`_v2_`, `google_container_cluster`, `google_app_engine_application`), emit a coarse `graviton_profile` entry with `source: "iac"`:
+
+- Default `tier: "conditional"` and record the GCP `machine_type` (or Cloud Run CPU) as a `signal` — Design maps it to the Graviton equivalent via the table in `graviton.md`.
+- If a Windows AMI data source or a `.csproj` targeting `net48` is present → `tier: "incompatible"`, caveat `"Windows/.NET Framework — not supported on Graviton"`.
+- If architecture cannot be inferred at all → `tier: "unknown"` (Clarify will ask Q11b).
+
+If `discover-app-code.md` already emitted a `graviton_profile` for the same service (`source: "app_code"`, higher fidelity), do **not** overwrite it — app-code signals win. IaC profiles fill gaps only.
+
 ## Step 3S: Simplified Discovery (≤ 8 primary resources)
 
 For small projects, skip the full clustering pipeline. Instead:
+
+0. **Exclude Priority 0 resources** before classification. Remove any resources matching the
+   Excluded Resources list in `clustering-classification-rules.md` (Priority 0). These include:
+   - `google_identity_platform_*` — Auth provider (keep existing, do not migrate)
+   - `google_firebase_auth_*` — Auth provider (keep existing, do not migrate)
+     Log each excluded resource: "Auth provider detected — excluded from migration scope. Keep your existing auth solution."
+     Do NOT include excluded resources in `gcp-resource-inventory.json` or any cluster.
 
 1. **Classify resources** using only Priority 1 hardcoded rules from the PRIMARY types list above.
    - Resources matching the list → PRIMARY
@@ -107,7 +136,7 @@ For small projects, skip the full clustering pipeline. Instead:
 
 4. **Set depth:** Networking cluster = depth 0. All other clusters = depth 1. (No Kahn's algorithm needed.)
 
-5. **Load** `steering/schema-discover-iac.md` and write output files
+5. **Load** `schema-discover-iac.md` and write output files
    (`gcp-resource-inventory.json`, `gcp-resource-clusters.json`) using the same schema.
    Add to metadata: `"clustering_mode": "simplified"`.
 
@@ -118,8 +147,9 @@ phases (clarify, design, estimate, generate) work identically regardless of clus
 
 ## Step 3: Classify Resources (PRIMARY vs SECONDARY)
 
-1. Read `steering/clustering-classification-rules.md` completely
+1. Read `clustering-classification-rules.md` completely
 2. For EACH resource from Step 1, apply classification rules in priority order:
+   - **Priority 0**: Check if in Excluded Resources list → **remove from resource list entirely**. Do not classify, cluster, or include in output. Log: "Auth provider detected — excluded from migration scope."
    - **Priority 1**: Check if in PRIMARY list → mark `classification: "PRIMARY"`, assign `tier`, continue
    - **Priority 2**: Check if type matches SECONDARY patterns → mark `classification: "SECONDARY"` with `secondary_role` (one of: `identity`, `access_control`, `network_path`, `configuration`, `encryption`, `orchestration`)
    - **Priority 3**: Apply fallback heuristics first, then LLM inference → mark as SECONDARY with `secondary_role` and `confidence` field (0.5-0.75)
@@ -131,7 +161,7 @@ phases (clarify, design, estimate, generate) work identically regardless of clus
 
 ## Step 4: Build Dependency Edges and Populate Serves
 
-1. Read `steering/typed-edges-strategy.md` completely
+1. Read `typed-edges-strategy.md` completely
 2. For EACH resource from Step 1, extract references from `raw_hcl`:
    - Extract all `google_*\.[\w\.]+` patterns
    - Classify edge type by field name/value context (see typed-edges-strategy.md)
@@ -145,7 +175,7 @@ phases (clarify, design, estimate, generate) work identically regardless of clus
 
 ## Step 5: Calculate Topological Depth
 
-1. Read `steering/depth-calculation.md` completely
+1. Read `depth-calculation.md` completely
 2. Use Kahn's algorithm (or equivalent topological sort) to assign `depth` field:
    - Depth 0: resources with no incoming dependencies
    - Depth N: resources where at least one dependency is depth N-1
@@ -155,7 +185,7 @@ phases (clarify, design, estimate, generate) work identically regardless of clus
 
 ## Step 6: Apply Clustering Algorithm
 
-1. Read `steering/clustering-algorithm.md` completely
+1. Read `clustering-algorithm.md` completely
 2. Apply Rules 1-6 in exact priority order:
    - **Rule 1: Networking Cluster** — `google_compute_network` + all `network_path` secondaries → 1 cluster
    - **Rule 2: Same-Type Grouping** — ALL primaries of identical type → 1 cluster (not one per resource)
@@ -179,7 +209,7 @@ phases (clarify, design, estimate, generate) work identically regardless of clus
 ### 7a: Write gcp-resource-inventory.json
 
 1. Create file: `$MIGRATION_DIR/gcp-resource-inventory.json`
-2. Load `steering/schema-discover-iac.md` and write with the exact schema for `gcp-resource-inventory.json`
+2. Load `schema-discover-iac.md` and write with the exact schema for `gcp-resource-inventory.json`
 
 **CRITICAL field names (use EXACTLY these):**
 
@@ -236,7 +266,48 @@ Include top-level `creation_order` array:
 4. Verify all cluster IDs match resource cluster_id assignments
 5. Report to user: "Wrote gcp-resource-inventory.json (X resources) and gcp-resource-clusters.json (Y clusters)"
 
-After generating output files, the parent `discover.md` handles the phase status update — do not update `.phase-status.json` here.
+### 7d: Optional — Write `ai-workload-profile.json` (Vertex-strong Terraform only)
+
+Run **only** when all of the following are true:
+
+1. `gcp-resource-inventory.json` → `ai_detection.has_ai_workload` is `true`
+2. **Vertex-strong:** at least one of:
+   - `ai_detection.ai_services` includes `vertex_ai`, **or**
+   - Any entry in `ai_detection.signals_found` references a Terraform resource type matching `google_vertex_ai_*` (see Step 2 pattern table)
+
+Do **not** run this step for AI signals that are **only** BigQuery ML, Document AI, Vision, etc., with **no** Vertex AI service or `google_vertex_ai_*` signal — Category F is scoped to strong Vertex evidence here.
+
+**If Vertex-strong:** Load `schema-discover-ai.md` and write `$MIGRATION_DIR/ai-workload-profile.json` with a **minimal IaC-inferred** profile:
+
+| Field                                        | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `metadata.profile_source`                    | `"iac_vertex"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `metadata.sources_analyzed.terraform`        | `true`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `metadata.sources_analyzed.application_code` | `false`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `metadata.sources_analyzed.billing_data`     | `false` (billing runs in the parent orchestrator after IaC; app-code or a later merge may set this)                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `summary.overall_confidence`                 | Copy from `ai_detection.confidence`                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `summary.confidence_level`                   | Copy from `ai_detection.confidence_level`                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `summary.total_models_detected`              | `0` if `models[]` is empty                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `summary.languages_found`                    | `[]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `summary.inferred_from_iac`                  | `true`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `summary.ai_source`                          | `"gemini"` if any Vertex resource type suggests generative/RAG endpoints (e.g. `google_vertex_ai_endpoint`, `google_vertex_ai_index`, `google_vertex_ai_index_endpoint`, metadata stores commonly used with generative search). Use `"other"` if **only** traditional ML resources (e.g. `google_vertex_ai_training_pipeline`, `google_vertex_ai_custom_job`, `google_vertex_ai_batch_prediction_job`) with no generative-type resources. If mixed, prefer `"gemini"` when any generative-type resource exists. |
+| `models`                                     | `[]` unless a model ID is explicitly present in Terraform config without guessing                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `integration.primary_sdk`                    | `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `integration.sdk_version`                    | omit or `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `integration.frameworks`                     | `[]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `integration.languages`                      | `[]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `integration.pattern`                        | `"unknown"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `integration.gateway_type`                   | `null`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `integration.capabilities_summary`           | All keys `false` unless a capability is clearly implied by resource kinds (default: all `false`)                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `infrastructure`                             | All `google_vertex_ai_*` resources from the inventory, with `address`, `type`, file path, and `config` as in schema                                                                                                                                                                                                                                                                                                                                                                                             |
+| `current_costs`                              | Omit unless billing data was merged into this run (same rule as app-code schema)                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `detection_signals`                          | Mirror `ai_detection.signals_found` into the `detection_signals[]` shape (method `terraform`, confidence, evidence strings)                                                                                                                                                                                                                                                                                                                                                                                     |
+
+**If `ai-workload-profile.json` already exists** in `$MIGRATION_DIR` with `metadata.profile_source` of `"application_code"` or `"merged"`, **skip Step 7d** (do not overwrite). Otherwise write or replace when Vertex-strong (including replacing a prior `"iac_vertex"` file).
+
+Report to user when written: "Wrote ai-workload-profile.json (IaC-inferred Vertex AI)."
+
+After generating output files (including optional Step 7d), the parent `discover.md` handles the phase status update — do not update `.phase-status.json` here.
 
 ## Output Validation Checklist
 
@@ -273,11 +344,19 @@ After generating output files, the parent `discover.md` handles the phase status
 - No cycles in dependency graph
 - Output is valid JSON
 
+### ai-workload-profile.json (only if Step 7d executed)
+
+- `metadata.profile_source` is `"iac_vertex"`
+- `summary.inferred_from_iac` is `true`
+- `integration.pattern` is `"unknown"` unless evidence supports another value
+- `models` is `[]` unless Terraform explicitly exposes model IDs
+- Valid JSON and matches `schema-discover-ai.md`
+
 ---
 
 ## Design Phase Integration
 
-The Design phase (`steering/design.md`) uses both outputs:
+The Design phase (`design.md`) uses these outputs:
 
 1. **From gcp-resource-clusters.json:**
    - `creation_order` — evaluates clusters depth-first (foundational first)
@@ -292,8 +371,10 @@ The Design phase (`steering/design.md`) uses both outputs:
    - `classification` / `secondary_role` — handles primary/secondary differently
    - `serves` — determines if secondary's primary is mapped
    - `depth` — validates clustering logic
-   - `tier` — routes to correct design-ref file (compute.md, database.md, etc.)
-   - `ai_detection` — determines if AI design phase runs
+   - `tier` — routes to correct design-ref file (design-ref-compute.md, design-ref-database.md, etc.)
+   - `ai_detection` — signals for inventory; when Step 7d ran, **`ai-workload-profile.json`** is the driver for AI Clarify/Design
+
+3. **From `ai-workload-profile.json` (when Step 7d wrote it):** consumed in Phase 2+ per `schema-discover-ai.md` (`profile_source: "iac_vertex"`).
 
 ---
 
