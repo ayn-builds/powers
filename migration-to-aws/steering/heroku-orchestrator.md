@@ -109,56 +109,41 @@ The `.migration/` directory is protected by a `.gitignore` created at init.
 
 ## Files in This Power
 
-_Every file below is FLAT in `steering/` under the name shown._
+Every file below is a flat file in `steering/`. This power has no subdirectories;
+steering files reference each other by bare filename.
 
 ```
-heroku-to-aws/
-├── heroku-orchestrator.md                                    ← You are here (skill entry point)
-│
-├── references/
-│   ├── phases/
-│   │   ├── discover/
-│   │   │   ├── heroku-discover.md                     # Phase 1: Discover orchestrator
-│   │   │   ├── heroku-discover-terraform.md           # Terraform discovery
-│   │   │   ├── heroku-discover-live-capture.md        # Live CLI capture (main-window pre-work, consent-gated)
-│   │   │   ├── heroku-discover-live.md                # Live discovery fragment (parses live-capture/)
-│   │   │   └── heroku-discover-billing.md             # Billing data parsing
-│   │   ├── clarify/
-│   │   │   └── heroku-clarify.md                      # Phase 2: Adaptive questions (12–15, batched ≤5)
-│   │   ├── design/
-│   │   │   └── heroku-design.md                       # Phase 3: Design orchestrator (flat single-pass mapping)
-│   │   ├── estimate/
-│   │   │   └── heroku-estimate.md                     # Phase 4: Cost projection
-│   │   ├── workshop/
-│   │   │   ├── heroku-workshop.md                     # Sidebar: optional post-Estimate what-if
-│   │   │   ├── heroku-workshop-sheet.md               # Assumption sheet knobs
-│   │   │   ├── heroku-workshop-refresh.md             # Patch prefs → Design → Estimate → snapshot
-│   │   │   ├── heroku-workshop-compare.md             # Side-by-side scenarios
-│   │   │   └── heroku-workshop-assemble.md            # Resolve sidebar → return to Generate
-│   │   ├── generate/
-│   │   │   ├── heroku-generate.md                     # Phase 5: Generate orchestrator
-│   │   │   ├── heroku-generate-terraform.md           # Terraform configurations
-│   │   │   ├── heroku-generate-docs.md                # MIGRATION_GUIDE.md + README.md
-│   │   │   ├── heroku-generate-report.md              # migration-report.html (stakeholder + scenarios)
-│   │   │   └── heroku-generate-eks.md                 # EKS manifests when design has EKS
-│   │   └── feedback/
-│   │       └── heroku-feedback.md                     # Phase 6: Feedback collection (reuses shared)
-│   │
-│   └── shared/                                 # heroku-to-aws's own shared references
-│           ├── README.md                       # what lives here + pointers to plugin-neutral shared data
-│           ├── heroku-pricing-cache.md          # Heroku plan pricing (source-side baseline)
-│           ├── heroku-schema-discover-heroku.md        # heroku-resource-inventory.json schema
-│           └── heroku-schema-workshop-scenarios.md     # scenarios/ + preferences.workshop contract
-│
-├── knowledge/design/                          # design lookup DATA (pure data, referenced by
-│   │                                           #  heroku-design.md _knowledge, gated per _when)
-│   ├── heroku-dyno-eb-sizing.json                     # Dyno type → Elastic Beanstalk EC2 instance type
-│   ├── heroku-dyno-fargate-sizing.json                # Dyno type → Fargate CPU/memory
-│   ├── heroku-eks-pod-sizing.json                     # Dyno type → EKS pod sizing + node selection
-│   ├── heroku-postgres-rds-sizing.json                # Postgres plan → RDS/Aurora sizing
-│   ├── heroku-redis-elasticache-sizing.json           # Redis plan → ElastiCache sizing
-│   ├── heroku-kafka-msk-sizing.json                   # Kafka plan → MSK sizing
-│   └── heroku-fast-path-addons.json                   # Add-on → AWS deterministic mappings (13+ entries)
+steering/
+├── heroku-orchestrator.md                # You are here (orchestrator + state machine)
+├── heroku-discover.md                    # Phase 1: Discover orchestrator
+├── heroku-discover-terraform.md          # Terraform discovery
+├── heroku-discover-live-capture.md       # Live CLI capture (main-window pre-work, consent-gated)
+├── heroku-discover-live.md               # Live discovery fragment (parses live-capture/)
+├── heroku-discover-billing.md            # Billing data parsing
+├── heroku-clarify.md                     # Phase 2: Adaptive questions (12–15, batched ≤5)
+├── heroku-design.md                      # Phase 3: Design orchestrator (flat single-pass mapping)
+├── heroku-estimate.md                    # Phase 4: Cost projection
+├── heroku-workshop.md                    # Sidebar: optional post-Estimate what-if
+├── heroku-workshop-sheet.md              # Assumption sheet knobs
+├── heroku-workshop-refresh.md            # Patch prefs → Design → Estimate → snapshot
+├── heroku-workshop-compare.md            # Side-by-side scenarios
+├── heroku-workshop-assemble.md           # Resolve sidebar → return to Generate
+├── heroku-generate.md                    # Phase 5: Generate orchestrator
+├── heroku-generate-terraform.md          # Terraform configurations
+├── heroku-generate-docs.md               # MIGRATION_GUIDE.md + README.md
+├── heroku-generate-report.md             # migration-report.html (stakeholder + scenarios)
+├── heroku-generate-eks.md                # EKS manifests when design has EKS
+├── heroku-feedback.md                    # Phase 6: Feedback collection (reuses shared)
+├── heroku-pricing-cache.md               # Heroku plan pricing (source-side baseline)
+├── heroku-schema-discover-heroku.md      # heroku-resource-inventory.json schema
+├── heroku-schema-workshop-scenarios.md   # scenarios/ + preferences.workshop contract
+├── heroku-dyno-eb-sizing.json            # Dyno type → Elastic Beanstalk EC2 instance type
+├── heroku-dyno-fargate-sizing.json       # Dyno type → Fargate CPU/memory
+├── heroku-eks-pod-sizing.json            # Dyno type → EKS pod sizing + node selection
+├── heroku-postgres-rds-sizing.json       # Postgres plan → RDS/Aurora sizing
+├── heroku-redis-elasticache-sizing.json  # Redis plan → ElastiCache sizing
+├── heroku-kafka-msk-sizing.json          # Kafka plan → MSK sizing
+└── heroku-fast-path-addons.json          # Add-on → AWS deterministic mappings (13+ entries)
 ```
 
 | Condition                                                | Action                                                                                                                                                                    |

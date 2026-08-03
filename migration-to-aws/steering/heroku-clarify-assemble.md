@@ -98,7 +98,7 @@ Write `$MIGRATION_DIR/preferences.json`:
 ```
 
 Do **not** write a `workshop` object from Clarify. The what-if workshop
-(`references/phases/workshop/`) creates/patches `preferences.workshop` later
+(`heroku-workshop.md`) creates/patches `preferences.workshop` later
 (`cpu_architecture`, `active`, `active_scenario_id`, `last_sheet_at`). See
 `heroku-schema-workshop-scenarios.md`.
 

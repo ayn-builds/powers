@@ -223,6 +223,101 @@ def _skip(rel: str) -> bool:
 
 
 # --------------------------------------------------------------------------------------
+# "Files in This Skill" layout trees
+# --------------------------------------------------------------------------------------
+# Both gcp-to-aws/SKILL.md and heroku-to-aws/SKILL.md document themselves with an ASCII
+# tree of the plugin's NESTED directory layout. Nothing loads through those paths — every
+# load directive in both files addresses its targets by bare filename — but the tree is the
+# most prominent structural statement in the file, and it describes a layout this power
+# does not have. A reviewer reading it (or grepping the fenced block) reasonably concludes
+# the port still references `references/phases/discover/discover.md`.
+#
+# A prose disclaimer above the fence was the first attempt and was not enough: the
+# disclaimer does not travel with the block when it is quoted, skimmed, or grepped. So
+# rewrite the tree itself into the flat layout it actually ships, which also makes the
+# fenced block agree with the reference scanners.
+#
+# Directory lines are dropped, every leaf is re-anchored directly under `steering/`, and the
+# trailing `#` comments are kept and re-aligned. Leaves are emitted in upstream tree order,
+# so the phase grouping is still legible in the sequence even without the directory nodes.
+TREE_LEAF = re.compile(r"^[│ ]*[├└]── (?P<name>[A-Za-z0-9_.<>-]+\.[a-z]+)(?P<rest>\s*#.*)?$")
+TREE_DIR = re.compile(r"^[│ ]*[├└]── [A-Za-z0-9_./-]+/\s*(#.*)?$")
+TREE_FILLER = re.compile(r"^[│ ]*$")
+
+
+def flatten_layout_tree(text: str, entry_flat: str, shipped: set[str]) -> str:
+    """Rewrite a `## Files in This Skill` ASCII tree into this power's flat layout.
+
+    Runs AFTER the generic reference pass, which has already rewritten the leaf names in
+    place (`pricing-cache.md` -> `cached-prices.md`, every `heroku-` prefix). So the leaves
+    read here are already the shipped flat names and need no further mapping — only the
+    directory scaffolding has to go.
+    """
+    marker = "## Files in This Skill"
+    if marker not in text:
+        return text
+    head, tail = text.split(marker, 1)
+    open_fence = tail.find("```\n")
+    if open_fence == -1:
+        return text
+    close_rel = tail.find("\n```", open_fence + 4)
+    if close_rel == -1:
+        return text
+    body = tail[open_fence + 4: close_rel]
+    rest = tail[close_rel + 4:]
+
+    leaves: list[tuple[str, str]] = []
+    for line in body.splitlines():
+        if TREE_DIR.match(line) or TREE_FILLER.match(line) or not line.strip():
+            continue
+        m = TREE_LEAF.match(line)
+        if not m:
+            # the root line (`gcp-to-aws/`) and the "You are here" entry-point row
+            continue
+        flat = m.group("name")
+        comment = (m.group("rest") or "").strip()
+        if flat == entry_flat:
+            continue  # the entry point is emitted first, by hand
+        # A leaf the projection does not ship. heroku's tree lists its `shared/README.md`,
+        # one of the four layout READMEs deliberately dropped (they document a nested
+        # structure a flat power cannot have). Keeping the row would advertise a file that
+        # is not there.
+        if flat not in shipped:
+            continue
+        leaves.append((flat, comment))
+
+    if not leaves:
+        return text
+
+    # de-dupe: the plugin vendors some shared assets into more than one directory, which
+    # collapse onto a single flat name.
+    seen: set[str] = set()
+    uniq: list[tuple[str, str]] = []
+    for flat, comment in leaves:
+        if flat in seen:
+            continue
+        seen.add(flat)
+        uniq.append((flat, comment))
+
+    width = max(len(f) for f, _ in uniq + [(entry_flat, "")]) + 2
+    lines = [
+        "steering/",
+        f"├── {entry_flat}".ljust(4 + width) + "# You are here (orchestrator + state machine)",
+    ]
+    for i, (flat, comment) in enumerate(uniq):
+        connector = "└──" if i == len(uniq) - 1 else "├──"
+        row = f"{connector} {flat}"
+        lines.append(row.ljust(4 + width) + comment if comment else row)
+
+    note = (
+        "## Files in This Power\n\n"
+        "Every file below is a flat file in `steering/`. This power has no subdirectories;\n"
+        "steering files reference each other by bare filename.\n"
+    )
+    return head + note + "\n```\n" + "\n".join(lines) + "\n```" + rest
+
+
+# --------------------------------------------------------------------------------------
 # Per-skill projection rules: (regex over skill-relative path) -> flat name template.
 # First match wins, so order matters. `\g<name>` groups are substituted.
 # --------------------------------------------------------------------------------------
@@ -466,12 +561,11 @@ MANUAL_REWRITES: dict[str, str] = {
     # definitions are flat steering files
     "<version from <plugin>/.claude-plugin/plugin.json>":
         "<this power's version from POWER.md frontmatter>",
-    # gcp-orchestrator's "Files in This Skill" tree draws the whole nested plugin layout.
-    # It has no file extensions on the directory lines, so no reference scanner can see it.
-    "## Files in This Skill\n\n```\ngcp-to-aws/\n":
-        "## Files in This Power\n\nEvery file below is FLAT in `steering/` under the name shown; the\n"
-        "tree is the upstream plugin's layout, kept only to show how the names were derived.\n\n"
-        "```\nsteering/\n",
+    # NOTE: the two "Files in This Skill" layout trees (gcp + heroku) used to be patched
+    # here, by rewriting the heading and the tree's root line and leaving the nested body
+    # alone. That was not enough — see flatten_layout_tree(), which now rewrites the tree
+    # body itself into the flat layout. Do not re-add a heading rewrite here; it would run
+    # first and stop flatten_layout_tree() from finding its marker.
     # imperative "load a skill by name" contradicting these files' own guidance
     "**You MUST use the `resolve-bedrock-model-id` skill.**":
         "**You MUST follow `llm-resolve-bedrock-model-id.md`.**",
@@ -491,9 +585,13 @@ MANUAL_REWRITES: dict[str, str] = {
         "| C5   | `llm-code-rewriter.md`                        |",
     "| C6   | `migration-to-aws:llm2bedrock-report-generator` |":
         "| C6   | `llm-report-generator.md`                     |",
-    # heroku's copy of the nested layout tree (gcp's is handled above)
-    "## Files in This Skill\n":
-        "## Files in This Power\n\n_Every file below is FLAT in `steering/` under the name shown._\n",
+    # A directory-only reference in live prose (heroku clarify-assemble), not in a tree. The
+    # generic pass rewrites every workshop reference that carries a filename
+    # (`references/phases/workshop/workshop.md` -> `heroku-workshop.md`), but a bare
+    # directory has no filename to match on, so this one survived as a dead path an agent
+    # could act on. Name the file instead of the directory.
+    "(`references/phases/workshop/`) creates/patches":
+        "(`heroku-workshop.md`) creates/patches",
     # slash-command invocations in user-facing copy would print a command that does not exist
     "`/migration-to-aws:llm-to-bedrock`": "the llm-to-bedrock engine",
     "/migration-to-aws:llm-to-bedrock": "the llm-to-bedrock engine",
@@ -1024,6 +1122,10 @@ def main() -> int:
         shutil.rmtree(steering)
     steering.mkdir(parents=True)
 
+    # every flat name this run will emit — flatten_layout_tree() drops tree rows naming a
+    # file the projection does not ship. Computed before the loop so it covers all engines.
+    shipped = {flat for m in emitted.values() for flat in m.values()}
+
     rewrites = 0
     written = 0
     for skill, mapping in emitted.items():
@@ -1053,6 +1155,8 @@ def main() -> int:
                 text = src.read_text(encoding="utf-8")
                 text, n = rewrite(text, pattern, table)
                 text = apply_script_patches(flat, text)
+                # after the reference pass, so the tree's leaves are already flat names
+                text = flatten_layout_tree(text, flat, shipped)
                 rewrites += n
                 dst.write_text(text, encoding="utf-8")
             else:

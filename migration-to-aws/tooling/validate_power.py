@@ -47,8 +47,6 @@ PLUGIN_SEGMENT = re.compile(
 # extension-based extractor never saw.
 LAYOUT_TOKENS = (
     "CLAUDE_PLUGIN_ROOT",
-    "`design-refs/`",
-    "`references/`",
     "$PLUGIN_ROOT",
     "<SKILL_BASE>",
     "<plugin>",
@@ -59,6 +57,28 @@ LAYOUT_TOKENS = (
     # one flat namespace — a cross-engine handoff is a file load, not an invocation.
     "Skill tool",
     "Skill** tool",
+)
+
+# Plugin directory names appearing as a *directory* reference, with no filename after them.
+#
+# These were originally listed in LAYOUT_TOKENS as backtick-wrapped literals (`` `references/` ``),
+# which made the check depend on the exact markup around the token. It missed two real
+# classes: the un-backticked directory rows inside the "Files in This Skill" ASCII trees,
+# and deeper backticked forms like `` `references/phases/workshop/` `` — which does not
+# contain `` `references/` `` as a substring, so the literal never fired. A reviewer found
+# both by reading the file, which is what this validator exists to prevent.
+#
+# Matched anywhere in the text, independent of surrounding markup. The reference extractor
+# cannot see these: a bare directory has no file extension to key on.
+#
+# The trailing lookahead requires the reference to END at a directory boundary, so prose
+# that merely contains a slash between two words does not trip it (`≥2 phases/rows` in
+# validate-migration-report.md is a table cell, not a path).
+LAYOUT_DIRS = re.compile(
+    r"(?<![A-Za-z0-9_./-])"
+    r"(?:references|design-refs|decision-refs|phases|vendored|helpers|output-templates|dsl)/"
+    r"(?:[a-z0-9-]+/)*"
+    r"(?![A-Za-z0-9_.-])"
 )
 
 # Files produced or consumed at run time, never steering content.
@@ -197,6 +217,8 @@ def main() -> int:
         for token in LAYOUT_TOKENS:
             if token in text:
                 layout[token].add(path.name)
+        for m in LAYOUT_DIRS.finditer(text):
+            layout[m.group(0)].add(path.name)
         for tok in candidates(text):
             clean = tok.lstrip("./")
             if clean.startswith("steering/"):

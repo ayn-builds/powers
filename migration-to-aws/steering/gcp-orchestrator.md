@@ -227,89 +227,73 @@ Replace `MMDD-HHMM` with the actual migration ID, generate the `last_updated` IS
 
 ## Files in This Power
 
-Every file below is FLAT in `steering/` under the name shown; the
-tree is the upstream plugin's layout, kept only to show how the names were derived.
+Every file below is a flat file in `steering/`. This power has no subdirectories;
+steering files reference each other by bare filename.
 
 ```
 steering/
-├── gcp-orchestrator.md                                    ← You are here (orchestrator + state machine)
-│
-├── references/
-│   ├── phases/
-│   │   ├── discover/
-│   │   │   ├── discover.md                     # Phase 1: Discover orchestrator
-│   │   │   ├── discover-iac.md                 # Terraform/IaC discovery
-│   │   │   ├── discover-live.md                # Live gcloud CLI discovery (read-only, consent-gated)
-│   │   │   ├── discover-app-code.md            # App code discovery
-│   │   │   └── discover-billing.md             # Billing data discovery
-│   │   ├── clarify/
-│   │   │   ├── clarify.md                     # Phase 2: Clarify orchestrator
-│   │   │   ├── clarify-global.md              # Category A: Global/Strategic (Q1-Q7)
-│   │   │   ├── clarify-compute.md             # Categories B+C: Config Gaps + Compute (Q8-Q11)
-│   │   │   ├── clarify-database.md            # Category D: Database (Q12–Q13b)
-│   │   │   ├── clarify-ai.md                  # Categories F/G/H: AI/Bedrock, Agentic, Programs (Q14-Q27)
-│   │   │   └── clarify-ai-only.md             # Standalone AI-only migration flow
-│   │   ├── design/
-│   │   │   ├── design.md                       # Phase 3: Design orchestrator
-│   │   │   ├── design-infra.md                 # Infrastructure design (IaC-based)
-│   │   │   ├── design-ai.md                    # AI workload design (Bedrock)
-│   │   │   └── design-billing.md               # Billing-only design (fallback)
-│   │   ├── estimate/
-│   │   │   ├── estimate.md                     # Phase 4: Estimate orchestrator
-│   │   │   ├── estimate-infra.md               # Infrastructure cost analysis
-│   │   │   ├── estimate-ai.md                  # AI workload cost analysis
-│   │   │   └── estimate-billing.md             # Billing-only cost analysis
-│   │   ├── workshop/
-│   │   │   ├── workshop.md                     # Sidebar: optional post-Estimate what-if
-│   │   │   ├── workshop-sheet.md               # Assumption sheet knobs
-│   │   │   ├── workshop-refresh.md             # Patch prefs → Design → Estimate → snapshot
-│   │   │   ├── workshop-compare.md             # Side-by-side scenarios
-│   │   │   └── workshop-assemble.md            # Resolve sidebar → return to Generate
-│   │   ├── generate/
-│   │   │   ├── generate.md                     # Phase 5: Generate orchestrator
-│   │   │   ├── generate-infra.md               # Infrastructure migration plan
-│   │   │   ├── generate-ai.md                  # AI migration plan
-│   │   │   ├── generate-billing.md             # Billing-only migration plan
-│   │   │   ├── generate-artifacts-infra.md     # Terraform configurations
-│   │   │   ├── generate-artifacts-scripts.md  # Migration scripts
-│   │   │   ├── generate-artifacts-ai.md        # Provider adapter + test harness
-│   │   │   ├── generate-artifacts-billing.md   # Skeleton Terraform
-│   │   │   └── generate-artifacts-docs.md      # MIGRATION_GUIDE.md + README.md
-│   │   └── feedback/
-│   │       ├── feedback.md                     # Phase 6: Feedback orchestrator
-│   │       └── feedback-trace.md               # Anonymized trace builder
-│   │
-│   ├── design-refs/
-│   │   ├── design-ref-index.md                            # Lookup table: GCP type → design-ref file
-│   │   ├── design-ref-fast-path.md                        # Deterministic 1:1 mappings (Pass 1)
-│   │   ├── design-ref-compute.md                          # Compute mappings (Cloud Run, GCE, GKE, etc.)
-│   │   ├── design-ref-database.md                         # Database mappings (Cloud SQL, Spanner, etc.)
-│   │   ├── design-ref-storage.md                          # Storage mappings (GCS, Filestore, etc.)
-│   │   ├── design-ref-networking.md                       # Networking mappings (VPC, LB, DNS, etc.)
-│   │   ├── design-ref-messaging.md                        # Messaging mappings (Pub/Sub, etc.)
-│   │   └── design-ref-ai.md                               # AI mappings (Vertex AI → Bedrock)
-│   │
-│   ├── clustering/terraform/
-│   │   ├── clustering-classification-rules.md             # Primary/secondary classification
-│   │   ├── clustering-algorithm.md             # Cluster formation rules
-│   │   ├── depth-calculation.md                # Topological depth calculation
-│   │   └── typed-edges-strategy.md             # Edge type assignment
-│   │
-│   └── shared/
-│       ├── schema-phase-status.md              # .phase-status.json schema (canonical reference)
-│       ├── schema-workshop-scenarios.md        # scenarios/ + preferences.workshop contract
-│       ├── schema-discover-iac.md              # gcp-resource-inventory + clusters schemas (loaded by discover-iac.md)
-│       ├── schema-discover-ai.md               # ai-workload-profile schema (loaded by discover-app-code.md and discover-iac.md Step 7d)
-│       ├── schema-discover-billing.md          # billing-profile schema (loaded by discover-billing.md)
-│       ├── schema-estimate-infra.md            # estimation-infra.json schema (loaded by estimate-infra.md at write time)
-│       ├── handoff-gates.md                    # Fail-closed phase handoff protocol (GATE_FAIL / HANDOFF_OK)
-│       ├── validate-artifacts.md               # Pre-report validation (Generate Step 0; read-only)
-│       ├── validate-migration-report.md          # Post-write HTML completeness (Generate Step 4)
-│       ├── migration-complexity.md             # Complexity tier definitions (small/medium/large) for timeline scaling
-│       ├── cached-prices.md                    # Cached AWS + source provider pricing (±5-25%, primary source)
-│       ├── graviton.md                         # Graviton/ARM64 tiers, mapping, per-phase rules (conditional load)
-│       ├── schema-graviton.md                  # graviton_profile + cpu_architecture + architecture_comparison schemas
-│       └── bedrock-quotas.md                   # Bedrock TPM/RPM quota awareness, burndown rates, capacity planning
+├── gcp-orchestrator.md                 # You are here (orchestrator + state machine)
+├── discover.md                         # Phase 1: Discover orchestrator
+├── discover-iac.md                     # Terraform/IaC discovery
+├── discover-live.md                    # Live gcloud CLI discovery (read-only, consent-gated)
+├── discover-app-code.md                # App code discovery
+├── discover-billing.md                 # Billing data discovery
+├── clarify.md                          # Phase 2: Clarify orchestrator
+├── clarify-global.md                   # Category A: Global/Strategic (Q1-Q7)
+├── clarify-compute.md                  # Categories B+C: Config Gaps + Compute (Q8-Q11)
+├── clarify-database.md                 # Category D: Database (Q12–Q13b)
+├── clarify-ai.md                       # Categories F/G/H: AI/Bedrock, Agentic, Programs (Q14-Q27)
+├── clarify-ai-only.md                  # Standalone AI-only migration flow
+├── design.md                           # Phase 3: Design orchestrator
+├── design-infra.md                     # Infrastructure design (IaC-based)
+├── design-ai.md                        # AI workload design (Bedrock)
+├── design-billing.md                   # Billing-only design (fallback)
+├── estimate.md                         # Phase 4: Estimate orchestrator
+├── estimate-infra.md                   # Infrastructure cost analysis
+├── estimate-ai.md                      # AI workload cost analysis
+├── estimate-billing.md                 # Billing-only cost analysis
+├── workshop.md                         # Sidebar: optional post-Estimate what-if
+├── workshop-sheet.md                   # Assumption sheet knobs
+├── workshop-refresh.md                 # Patch prefs → Design → Estimate → snapshot
+├── workshop-compare.md                 # Side-by-side scenarios
+├── workshop-assemble.md                # Resolve sidebar → return to Generate
+├── generate.md                         # Phase 5: Generate orchestrator
+├── generate-infra.md                   # Infrastructure migration plan
+├── generate-ai.md                      # AI migration plan
+├── generate-billing.md                 # Billing-only migration plan
+├── generate-artifacts-infra.md         # Terraform configurations
+├── generate-artifacts-scripts.md       # Migration scripts
+├── generate-artifacts-ai.md            # Provider adapter + test harness
+├── generate-artifacts-billing.md       # Skeleton Terraform
+├── generate-artifacts-docs.md          # MIGRATION_GUIDE.md + README.md
+├── feedback.md                         # Phase 6: Feedback orchestrator
+├── feedback-trace.md                   # Anonymized trace builder
+├── design-ref-index.md                 # Lookup table: GCP type → design-ref file
+├── design-ref-fast-path.md             # Deterministic 1:1 mappings (Pass 1)
+├── design-ref-compute.md               # Compute mappings (Cloud Run, GCE, GKE, etc.)
+├── design-ref-database.md              # Database mappings (Cloud SQL, Spanner, etc.)
+├── design-ref-storage.md               # Storage mappings (GCS, Filestore, etc.)
+├── design-ref-networking.md            # Networking mappings (VPC, LB, DNS, etc.)
+├── design-ref-messaging.md             # Messaging mappings (Pub/Sub, etc.)
+├── design-ref-ai.md                    # AI mappings (Vertex AI → Bedrock)
+├── clustering-classification-rules.md  # Primary/secondary classification
+├── clustering-algorithm.md             # Cluster formation rules
+├── depth-calculation.md                # Topological depth calculation
+├── typed-edges-strategy.md             # Edge type assignment
+├── schema-phase-status.md              # .phase-status.json schema (canonical reference)
+├── schema-workshop-scenarios.md        # scenarios/ + preferences.workshop contract
+├── schema-discover-iac.md              # gcp-resource-inventory + clusters schemas (loaded by discover-iac.md)
+├── schema-discover-ai.md               # ai-workload-profile schema (loaded by discover-app-code.md and discover-iac.md Step 7d)
+├── schema-discover-billing.md          # billing-profile schema (loaded by discover-billing.md)
+├── schema-estimate-infra.md            # estimation-infra.json schema (loaded by estimate-infra.md at write time)
+├── handoff-gates.md                    # Fail-closed phase handoff protocol (GATE_FAIL / HANDOFF_OK)
+├── validate-artifacts.md               # Pre-report validation (Generate Step 0; read-only)
+├── validate-migration-report.md        # Post-write HTML completeness (Generate Step 4)
+├── migration-complexity.md             # Complexity tier definitions (small/medium/large) for timeline scaling
+├── cached-prices.md                    # Cached AWS + source provider pricing (±5-25%, primary source)
+├── graviton.md                         # Graviton/ARM64 tiers, mapping, per-phase rules (conditional load)
+├── schema-graviton.md                  # graviton_profile + cpu_architecture + architecture_comparison schemas
+└── bedrock-quotas.md                   # Bedrock TPM/RPM quota awareness, burndown rates, capacity planning
 ```
 
 | Condition                                                     | Action                                                                                                                                                                                                                                                          |

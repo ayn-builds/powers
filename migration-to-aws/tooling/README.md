@@ -74,6 +74,35 @@ extension and cannot be caught by reference extraction at all. `LAYOUT_TOKENS` c
 as raw substrings instead. Add to it whenever upstream introduces a new base-dir variable —
 it is the cheapest guard in the file.
 
+4. **Directory references were matched as backtick-wrapped literals**, which made the check
+   depend on the markup around the token. `LAYOUT_TOKENS` held `` `references/` `` with its
+   backticks, so it missed both the un-backticked directory rows inside the "Files in This
+   Skill" ASCII trees and the deeper backticked form `` `references/phases/workshop/` ``
+   (which does not contain `` `references/` `` as a substring). A reviewer found both by
+   reading `gcp-orchestrator.md` — the exact failure this validator exists to prevent. Those
+   literals are now the `LAYOUT_DIRS` regex, matched regardless of surrounding markup, with a
+   trailing boundary so prose like `≥2 phases/rows` does not trip it.
+
+## Layout trees
+
+`gcp-to-aws/SKILL.md` and `heroku-to-aws/SKILL.md` each document themselves with an ASCII
+tree of the plugin's **nested** directory layout. Nothing loads through those paths — both
+files address every target by bare filename — but the tree is the most prominent structural
+statement in the file, so it reads as though the port still resolves
+`references/phases/discover/discover.md`.
+
+A prose disclaimer above the fence was the first attempt and was not enough: it does not
+travel with the block when the tree is quoted, skimmed, or grepped, and it left heroku's tree
+still rooted at `heroku-to-aws/`. `flatten_layout_tree()` now rewrites the tree **body** into
+the flat layout — directory rows dropped, every leaf re-anchored under `steering/`, comments
+re-aligned, upstream order preserved so the phase grouping is still legible. It runs after
+the generic reference pass, so the leaves it reads are already the shipped flat names
+(`cached-prices.md`, the `heroku-` prefixes). Rows naming a file the projection does not ship
+are dropped, which is what removes heroku's `shared/README.md` row.
+
+Do not re-add a `## Files in This Skill` heading rewrite to `MANUAL_REWRITES`: it runs first
+and would stop `flatten_layout_tree()` from finding its marker.
+
 Adding a whitelist entry to `ARTIFACT_HINTS` is the right fix **only** when the name really is
 a runtime output or a user-repo file. If it is something the power ships, fix the projection.
 
